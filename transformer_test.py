@@ -115,18 +115,24 @@ if __name__ == "__main__":
     val_interval = 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Parameters for autoregressive steps and loss threshold
+    max_autoregressive_steps = 5  # Set your desired max autoregressive steps
+    loss_threshold = 0.04       # Set your desired loss threshold
+    current_autoregressive_steps = 2  # Start with 1 autoregressive step
+
     # Initialize model
     data_location = ["./data/test_data.npy"]  # Replace with your actual path
+    trajec_max_len = num_timesteps + max_autoregressive_steps + 1
     dataset = bfs_dataset(
         data_location=data_location,
-        trajec_max_len=num_timesteps + 1,
+        trajec_max_len=trajec_max_len,
         n_span=500,
         start_n=0,
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     val_dataset = bfs_dataset(
         data_location=data_location,
-        trajec_max_len=num_timesteps + 1,
+        trajec_max_len=trajec_max_len,
         n_span=500,
         start_n=500,
     )
@@ -152,20 +158,34 @@ if __name__ == "__main__":
         for batch in dataloader:
             batch: torch.Tensor = batch.to(device)
             batch = process_tensor(batch, coarse_dim, down_sampler)
-            input_data = batch[:, :-1]
-            target_data = batch[:, -1]
-            output = model(input_data)
-            loss: torch.Tensor = criterion(output, target_data)
+            input_data = batch[:, :num_timesteps]  # Shape: (batch_size, num_timesteps, ...)
+            target_data = batch[:, num_timesteps : num_timesteps + current_autoregressive_steps]  # Shape: (batch_size, current_autoregressive_steps, ...)
+
+            total_batch_loss = 0.0
+            current_input = input_data.clone()
+
+            for step in range(current_autoregressive_steps):
+                output = model(current_input)
+                target = target_data[:, step]
+
+                loss: torch.Tensor = criterion(output, target)
+                total_batch_loss += loss
+
+                # Update current_input by appending output and removing the oldest time step
+                output = output.unsqueeze(1)  # Add time dimension
+                current_input = torch.cat([current_input[:, 1:], output], dim=1)
+
+            avg_batch_loss = total_batch_loss / current_autoregressive_steps
             optimizer.zero_grad()
-            loss.backward()
+            avg_batch_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
-            total_loss += loss.item()
+            total_loss += avg_batch_loss.item()
 
         avg_loss = total_loss / len(dataloader)
         tqdm.write(f"Epoch [{epoch+1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
 
-        # Compute validation loss every 10 epochs
+        # Compute validation loss every val_interval epochs
         if epoch % val_interval == 0 and epoch > 0:
             model.eval()
             total_val_loss = 0.0
@@ -173,13 +193,38 @@ if __name__ == "__main__":
                 for val_batch in val_dataloader:
                     val_batch = val_batch.to(device)
                     val_batch = process_tensor(val_batch, coarse_dim, down_sampler)
-                    input_data = val_batch[:, :-1]
-                    target_data = val_batch[:, -1]
-                    output = model(input_data)
-                    val_loss = criterion(output, target_data)
-                    total_val_loss += val_loss.item()
+                    input_data = val_batch[:, :num_timesteps]
+                    target_data = val_batch[:, num_timesteps : num_timesteps + current_autoregressive_steps]
+
+                    total_batch_loss = 0.0
+                    current_input = input_data.clone()
+
+                    for step in range(current_autoregressive_steps):
+                        output = model(current_input)
+                        target = target_data[:, step]
+
+                        val_loss = criterion(output, target)
+                        total_batch_loss += val_loss.item()
+
+                        # Update current_input
+                        output = output.unsqueeze(1)
+                        current_input = torch.cat([current_input[:, 1:], output], dim=1)
+
+                    avg_val_batch_loss = total_batch_loss / current_autoregressive_steps
+                    total_val_loss += avg_val_batch_loss
+
             avg_val_loss = total_val_loss / len(val_dataloader)
             tqdm.write(f"Validation Loss after Epoch [{epoch+1}]: {avg_val_loss:.4f}")
+
+            # Increase autoregressive steps if validation loss is below threshold
+            if (
+                avg_val_loss < loss_threshold
+                and current_autoregressive_steps < max_autoregressive_steps
+            ):
+                current_autoregressive_steps += 1
+                tqdm.write(
+                    f"Validation loss {avg_val_loss:.4f} below threshold {loss_threshold}, increasing autoregressive steps to {current_autoregressive_steps}"
+                )
 
             # Save the model if validation loss has improved
             if avg_val_loss < best_val_loss:
