@@ -112,6 +112,7 @@ if __name__ == "__main__":
     coarse_dim = (15, 15, 4)
     num_timesteps = 20
     batch_size = 2
+    val_interval = 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize model
@@ -129,7 +130,7 @@ if __name__ == "__main__":
         n_span=500,
         start_n=500,
     )
-    val_dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
+    val_dataloader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
     model = SpatiotemporalTransformer(
         volume_size=coarse_dim, num_timesteps=num_timesteps
     ).to(device)
@@ -137,6 +138,8 @@ if __name__ == "__main__":
     # Define the model, loss function, and optimizer
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+
+    best_val_loss = float("inf")
 
     # Training loop
     num_epochs = 100
@@ -162,6 +165,33 @@ if __name__ == "__main__":
         avg_loss = total_loss / len(dataloader)
         tqdm.write(f"Epoch [{epoch+1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
 
+        # Compute validation loss every 10 epochs
+        if epoch % val_interval == 0 and epoch > 0:
+            model.eval()
+            total_val_loss = 0.0
+            with torch.no_grad():
+                for val_batch in val_dataloader:
+                    val_batch = val_batch.to(device)
+                    val_batch = process_tensor(val_batch, coarse_dim, down_sampler)
+                    input_data = val_batch[:, :-1]
+                    target_data = val_batch[:, -1]
+                    output = model(input_data)
+                    val_loss = criterion(output, target_data)
+                    total_val_loss += val_loss.item()
+            avg_val_loss = total_val_loss / len(val_dataloader)
+            tqdm.write(f"Validation Loss after Epoch [{epoch+1}]: {avg_val_loss:.4f}")
+
+            # Save the model if validation loss has improved
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                os.makedirs("test_models", exist_ok=True)
+                model_save_path = "test_models/best_model.pth"
+                torch.save(model.state_dict(), model_save_path)
+                tqdm.write(
+                    f"Best model saved with validation loss {best_val_loss:.4f} to {model_save_path}"
+                )
+
+    # Save the final model
     os.makedirs("test_models", exist_ok=True)
     model_save_path = "test_models/model.pth"
     torch.save(model.state_dict(), model_save_path)
