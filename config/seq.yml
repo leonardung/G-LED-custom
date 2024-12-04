@@ -1,0 +1,38 @@
+# Dataset
+dataset: "bfs_les" # Name of the dataset
+data_location: 
+  - "./data/test_data.npy" # The relative or absolute path to the data.npy file
+trajec_max_len: 11 # Max sequence length (per sequence) to train the model
+start_n: 0 # The starting step of the data
+n_span: 880 # The total step of the data from the starting step
+trajec_max_len_valid: 11 # Max sequence length (per sequence) to validate the model
+start_n_valid: 880 # The starting step of the validation data
+n_span_valid: 110 # The total step of the validation data from the starting step
+
+# Model
+n_layer: 2 # Number of attention layers
+output_hidden_states: true # Output hidden matrix
+output_attentions: true # Output attention matrix
+n_ctx: 10 # Number of steps the transformer can look back at
+n_embd: 4116 # The hidden state dimension transformer to predict
+n_head: 1 # Number of heads per layer
+embd_pdrop: 0.0 # Embedding dropout probability
+layer_norm_epsilon: 1.0e-5 # Epsilon value for layer normalization (Do not change)
+attn_pdrop: 0.0 # Attention dropout probability
+resid_pdrop: 0.0 # Residual dropout probability
+activation_function: "relu" # Activation function for the model
+initializer_range: 0.02 # Range for weight initialization
+
+# Training
+start_Nt: 1 # The starting length for forward propagation
+d_Nt: 1 # The change in length for forward propagation
+batch_size: 1 # Number of sequences to train together per backpropagation
+batch_size_valid: 1 # Number of sequences to validate together per validation
+shuffle: true # Shuffle the training data
+device: "cuda" # Device to run the training (e.g., 'cuda', 'cpu')
+epoch_num: 10 # Number of epochs for training
+learning_rate: 1.0e-4 # Learning rate for the optimizer
+gamma: 0.99083194489 # Learning rate decay factor
+coarse_dim: [14, 7, 14] # The coarse shape (hidden) of the transformer
+coarse_mode: "trilinear" # The method for downsampling the snapshot
+march_tol: 0.00001 # March threshold for Nt + 1

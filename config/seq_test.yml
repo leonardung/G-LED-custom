@@ -1,0 +1,9 @@
+train_args_txt: output/bfs_les_2024_12_02_20_25_49/logging/args.yml
+Nt_read: 1
+trajec_max_len: 101
+start_n: 770
+n_span: 102
+test_Nt: 100
+batch_size: 1
+shuffle: false
+device: cuda:0
