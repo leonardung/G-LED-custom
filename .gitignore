@@ -162,3 +162,7 @@ cython_debug/
 #.idea/
 /data/*.npy
 output/
+*.pth
+*.png
+*.png
+/Video_diffusion_github

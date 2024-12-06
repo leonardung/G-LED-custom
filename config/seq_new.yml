@@ -1,0 +1,14 @@
+# Model
+n_layer: 2 # Number of attention layers
+output_hidden_states: true # Output hidden matrix
+output_attentions: true # Output attention matrix
+n_ctx: 13 # Number of steps the transformer can look back at
+n_embd: 6144 # The hidden state dimension transformer to predict
+n_head: 2 # Number of heads per layer
+embd_pdrop: 0.0 # Embedding dropout probability
+layer_norm_epsilon: 1.0e-5 # Epsilon value for layer normalization (Do not change)
+attn_pdrop: 0.0 # Attention dropout probability
+resid_pdrop: 0.0 # Residual dropout probability
+activation_function: "relu" # Activation function for the model
+initializer_range: 0.02 # Range for weight initialization
+device: "cuda" # Device to run the training (e.g., 'cuda', 'cpu')

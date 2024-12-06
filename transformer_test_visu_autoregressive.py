@@ -5,8 +5,9 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 
+from custom_models.spatiotemporal_transformer import SpatiotemporalTransformer
 from data.data_bfs_preprocess import bfs_dataset
-from transformer_test import SpatiotemporalTransformer, process_tensor
+from transformer_test import process_tensor
 
 
 def autoregressive_test(
@@ -38,7 +39,7 @@ def autoregressive_test(
     pred_min, pred_max = float("inf"), float("-inf")
     label_min, label_max = float("inf"), float("-inf")
     error_min, error_max = float("inf"), float("-inf")
-    all_results = []
+    all_results: list[list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(dataloader):
             # Skip timesteps based on stride
@@ -49,7 +50,7 @@ def autoregressive_test(
             input_data = batch[:, :num_timesteps].to(device)
             full_target_data = batch[:, num_timesteps:].to(device)
             autoregressive_input = input_data.clone()
-            results = []
+            results: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
             for step in range(num_autoregressive_steps):
                 predicted: torch.Tensor = model(autoregressive_input)
 
@@ -58,8 +59,8 @@ def autoregressive_test(
                 )
 
                 target_data: torch.Tensor = full_target_data[:, step]
-                predicted=predicted.reshape(3,*coarse_dim)
-                target_data=target_data.reshape(3,*coarse_dim)
+                predicted = predicted.reshape(3, *coarse_dim)
+                target_data = target_data.reshape(3, *coarse_dim)
                 error = torch.abs(predicted - target_data)
 
                 # Compute error
@@ -82,16 +83,17 @@ def autoregressive_test(
             all_results.append(results)
 
     # Second pass: plot and save results
+    z = 4
     for j, timesteps in enumerate(all_results):
         timestep_dir = os.path.join(save_dir, f"iteration_{j}")
         os.makedirs(timestep_dir, exist_ok=True)
-        for direction_idx, direction in enumerate(["u","v","w"]):
+        for direction_idx, direction in enumerate(["u", "v", "w"]):
             direction_dir = os.path.join(timestep_dir, direction)
             os.makedirs(direction_dir, exist_ok=True)
             for i, (predicted, target_data, error) in enumerate(timesteps):
-                pred_img = predicted[direction_idx, :, :, 1].numpy()
-                label_img = target_data[direction_idx, :, :, 1].numpy()
-                error_img = error[direction_idx, :, :, 1].numpy()
+                pred_img = predicted[direction_idx, :, :, z].numpy()
+                label_img = target_data[direction_idx, :, :, z].numpy()
+                error_img = error[direction_idx, :, :, z].numpy()
 
                 # Plot and save with consistent colorbars
                 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -126,27 +128,33 @@ def autoregressive_test(
         print(f"Results saved in {save_dir}")
 
 
-# Example usage
 if __name__ == "__main__":
-    # Test DataLoader
-    coarse_dim = (15, 15, 4)
-    num_timesteps = 20
-    num_autoregressive_steps = 40
-    stride = 2
+    coarse_dim = (32, 32, 8)
+    num_timesteps = 5
+    num_autoregressive_steps = 39
+    stride = 20
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_save_path = "test_models/model.pth"
+    model_save_path = "test_models/best_model.pth"
     model = SpatiotemporalTransformer(
-        volume_size=coarse_dim, num_timesteps=num_timesteps
+        volume_size=coarse_dim,
+        num_timesteps=num_timesteps,
+        d_model=2048,
+        nhead=4,
+        num_encoder_layers=2,
+        num_decoder_layers=2,
     ).to(device)
     model.load_state_dict(torch.load(model_save_path))
     model.eval()
-    test_data_location = ["./data/test_data.npy"]  # Replace with your actual path
+    test_data_location = ["./data/global_domain_float16_all.npy"]
     test_dataset = bfs_dataset(
         data_location=test_data_location,
         trajec_max_len=num_timesteps + num_autoregressive_steps + 1,
-        start_n=500,
-        n_span=64,
+        n_span=1000,
+        start_n=0,
+        stride=20,
+        mode="val",
     )
+    print(len(test_dataset))
     test_dataloader = DataLoader(
         test_dataset, batch_size=1, shuffle=False, num_workers=0
     )
