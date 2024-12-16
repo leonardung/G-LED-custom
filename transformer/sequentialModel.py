@@ -8,6 +8,7 @@ import numpy as np
 import math
 import torch.nn.functional as F
 from packaging import version
+from config.seq_args_typed import TypedArgs
 from transformer.spatialModel import MLP as MLPDense
 
 
@@ -62,19 +63,19 @@ class Attention(nn.Module):
     """
     Args:
             nx (:obj:`int`): The number of embedding feature, e.g., 128, 256, 512 or so
-            n_ctx (:obj:`int`): The context length (not sure)
+            num_timesteps (:obj:`int`): The context length (not sure)
             config (:obj:T.B.D):
     """
 
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, nx, num_timesteps, config, scale=False):
         super().__init__()
 
         assert nx % config.n_head == 0
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(
-                1, 1, n_ctx, n_ctx
-            ),
+            torch.tril(
+                torch.ones((num_timesteps, num_timesteps), dtype=torch.uint8)
+            ).view(1, 1, num_timesteps, num_timesteps),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e4))
         self.n_head = config.n_head
@@ -179,11 +180,11 @@ class Attention(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False):
+    def __init__(self, num_timesteps, config: TypedArgs, scale=False):
         super().__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.attn = Attention(nx, n_ctx, config, scale)
+        self.attn = Attention(nx, num_timesteps, config, scale)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
@@ -218,17 +219,20 @@ class Block(nn.Module):
 
 
 class SequentialModel(nn.Module):
-    def __init__(self, config):  # in MLP: n_state=3072 (4 * n_embd)
+    def __init__(self, config: TypedArgs):  # in MLP: n_state=3072 (4 * n_embd)
         super().__init__()
         self.config = config
         self.output_hidden_states = config.output_hidden_states
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
-            [Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)]
+            [
+                Block(config.num_timesteps, config, scale=True)
+                for _ in range(config.n_layer)
+            ]
         )
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.mlp_f = nn.Linear(config.n_embd, config.n_embd)
-        self.wpe = nn.Embedding(config.n_ctx, config.n_embd)
+        self.wpe = nn.Embedding(config.num_timesteps, config.n_embd)
         self.init_weights()
         self.n_embd = config.n_embd
 
@@ -421,7 +425,7 @@ class SequentialModel(nn.Module):
                 t.view(*attention_output_shape) for t in all_attentions
             )
             outputs = outputs + (all_attentions,)
-            
+
         # [last_hidden_state, past_key_values, hidden_states, attentions]
         return outputs
 

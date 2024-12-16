@@ -1,404 +1,193 @@
-import pdb
-import torch
-from tqdm import tqdm
-import numpy as np
-import time
 import os
-import matplotlib.pyplot as plt
-import matplotlib
+from matplotlib import pyplot as plt
+import numpy as np
+import torch
+from train_test_seq.train_seq import _process_tensor
+import cv2
 
-"""
-Start training test
-"""
+def autoregressive_test(
+    model,
+    dataloader,
+    device,
+    save_dir,
+    num_timesteps,
+    down_sampler,
+    coarse_dim,
+    num_autoregressive_steps=5,
+    stride=5,
+    num_velocities=3,
+    z=None,
+):
+    """
+    Test the model autoregressively and compare each step with the ground truth.
 
+    Args:
+        model: Trained model.
+        dataloader: DataLoader for the test dataset.
+        device: Computation device (CPU or GPU).
+        save_dir: Directory to save the result images.
+        num_autoregressive_steps: Number of autoregressive steps to perform.
+        stride: Number of timesteps to skip before starting the autoregressive loop.
+    """
+    # Ensure the model is in evaluation mode
+    model.eval()
 
-def test_epoch(args, model, data_loader, loss_func, Nt, down_sampler, ite_thold=None):
+    # Create directory to save results
+    os.makedirs(save_dir, exist_ok=True)
+    pred_min, pred_max = float("inf"), float("-inf")
+    label_min, label_max = float("inf"), float("-inf")
+    error_min, error_max = float("inf"), float("-inf")
+    all_results: list[list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = []
     with torch.no_grad():
-        # IDHistory = [0] + [i for i in range(2, args.n_ctx)]
-        IDHistory = [i for i in range(1, args.n_ctx)]
-        REs = []
-        print("Total ite", len(data_loader))
-        for iteration, batch in tqdm(enumerate(data_loader)):
-            if ite_thold is None:
-                pass
-            else:
-                if iteration > ite_thold:
-                    break
-            batch = batch.to(args.device).float()
-            b_size = batch.shape[0]  # Batch size
-            num_time = batch.shape[1]  # Number of timesteps
-            num_velocity = 3  # Number of velocity components (u, v, w)
+        for batch_idx, batch in enumerate(dataloader):
+            # Skip timesteps based on stride
+            if batch_idx % stride != 0:
+                continue
+            batch: torch.Tensor = batch.to(device)
+            batch = _process_tensor(batch, coarse_dim, down_sampler)
+            input_data = batch[:, :num_timesteps].to(device)
+            full_target_data = batch[:, num_timesteps:].to(device)
+            autoregressive_input = input_data.clone()
+            results: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
+            for step in range(num_autoregressive_steps):
+                predicted: torch.Tensor = model(autoregressive_input)[0][:, -1]
 
-            batch = batch.reshape(
-                [
-                    b_size * num_time,
-                    num_velocity,
-                    batch.shape[3],
-                    batch.shape[4],
-                    batch.shape[5],
-                ]
-            )
+                autoregressive_input = torch.cat(
+                    (autoregressive_input[:, 1:], predicted.unsqueeze(1)), dim=1
+                )
 
-            # Apply the down-sampler
-            batch_coarse = down_sampler(batch).reshape(
-                [
-                    b_size,
-                    num_time,
-                    num_velocity,
-                    args.coarse_dim[0],
-                    args.coarse_dim[1],
-                    args.coarse_dim[2],
-                ]
-            )
-            batch_coarse_flatten = batch_coarse.reshape(
-                [
-                    b_size,
-                    num_time,
-                    num_velocity
-                    * args.coarse_dim[0]
-                    * args.coarse_dim[1]
-                    * args.coarse_dim[2],
-                ]
-            )
+                target_data: torch.Tensor = full_target_data[:, step]
+                predicted = predicted.reshape(num_velocities, *coarse_dim)
+                target_data = target_data.reshape(num_velocities, *coarse_dim)
+                error = torch.abs(predicted - target_data)
 
-            past = None
-            xn = batch_coarse_flatten[:, 0:1, :]
-            previous_len = 1
-            mem = []
-            for j in range(Nt):
-                if j == 0:
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
-                elif past[0][0].shape[2] < args.n_ctx and j > 0:
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
+                # Compute error
+                # Update global min/max for predictions, labels, and errors
+                pred_min = min(pred_min, predicted.min().item())
+                pred_max = max(pred_max, predicted.max().item())
+                label_min = min(label_min, target_data.min().item())
+                label_max = max(label_max, target_data.max().item())
+                error_min = min(error_min, error.min().item())
+                error_max = max(error_max, error.max().item())
+
+                # Store results for plotting
+                results.append(
+                    (
+                        predicted.cpu(),
+                        target_data.cpu(),
+                        error.cpu(),
+                    )
+                )
+            all_results.append(results)
+
+    # Second pass: plot and save results
+    z = coarse_dim[-1] // 2 - 1 if z is None else z
+    avg_rmse_evolution = {direction: [] for direction in ["u", "v", "w"][:num_velocities]}
+    for j, timesteps in enumerate(all_results):
+        timestep_dir = os.path.join(save_dir, f"iteration_{j}")
+        os.makedirs(timestep_dir, exist_ok=True)
+
+        # Reset error evolution for this batch
+        error_evolution = {direction: [] for direction in ["u", "v", "w"][:num_velocities]}
+
+        for direction_idx, direction in enumerate(["u", "v", "w"][:num_velocities]):
+            direction_dir = os.path.join(timestep_dir, direction)
+            os.makedirs(direction_dir, exist_ok=True)
+
+            images_for_video = []
+
+            for i, (predicted, target_data, error) in enumerate(timesteps):
+                if len(coarse_dim) == 3:
+                    pred_img = predicted[direction_idx, :, :, z].numpy()
+                    label_img = target_data[direction_idx, :, :, z].numpy()
+                    error_img = error[direction_idx, :, :, z].numpy()
                 else:
-                    past = [
-                        [past[l][0][:, :, IDHistory, :], past[l][1][:, :, IDHistory, :]]
-                        for l in range(args.n_layer)
-                    ]
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
-                xn = xnp1
-                mem.append(xn)
-            mem = torch.cat(mem, dim=1)
-            local_batch_size = mem.shape[0]
-            for i in tqdm(range(local_batch_size)):
-                try:
-                    er = loss_func(
-                        mem[i : i + 1],
-                        batch_coarse_flatten[
-                            i : i + 1,
-                            previous_len : previous_len + Nt,
-                            :,
-                        ],
-                    )
-                    r_er = er / loss_func(
-                        mem[i : i + 1] * 0,
-                        batch_coarse_flatten[
-                            i : i + 1, previous_len : previous_len + Nt, :
-                        ],
-                    )
-                    REs.append(r_er.item())
-                except:
-                    print("------------ errror in loss calculation -----------------")
-    return max(REs), min(REs), sum(REs) / len(REs), 3 * np.std(np.asarray(REs))
- 
-def test_plot_eval(args, args_sample, model, data_loader, loss_func, Nt, down_sampler):
-    try:
-        os.makedirs(args.experiment_path + "/contour")
-    except:
-        pass
-    contour_dir = args.experiment_path + "/contour"
-    with torch.no_grad():
-        # IDHistory = [0] + [i for i in range(2, args.n_ctx)]
-        IDHistory = [i for i in range(1, args.n_ctx)]
-        REs = []
-        print("Total ite", len(data_loader))
-        for iteration, batch in tqdm(enumerate(data_loader)):
-            batch = batch.to(args.device).float()
-            b_size = batch.shape[0]  # Batch size
-            num_time = batch.shape[1]  # Number of timesteps
-            num_velocity = 3  # Number of velocity components (u, v, w)
+                    pred_img = predicted[direction_idx, :, :].numpy()
+                    label_img = target_data[direction_idx, :, :].numpy()
+                    error_img = error[direction_idx, :, :].numpy()
 
-            batch = batch.reshape(
-                [
-                    b_size * num_time,
-                    num_velocity,
-                    batch.shape[3],
-                    batch.shape[4],
-                    batch.shape[5],
-                ]
-            )
+                # Compute RMSE for the error plot
+                rmse = np.sqrt(np.mean(error_img ** 2))
 
-            # Apply the down-sampler
-            batch_coarse = down_sampler(batch).reshape(
-                [
-                    b_size,
-                    num_time,
-                    num_velocity,
-                    args.coarse_dim[0],
-                    args.coarse_dim[1],
-                    args.coarse_dim[2],
-                ]
-            )
-            batch_coarse_flatten = batch_coarse.reshape(
-                [
-                    b_size,
-                    num_time,
-                    num_velocity
-                    * args.coarse_dim[0]
-                    * args.coarse_dim[1]
-                    * args.coarse_dim[2],
-                ]
-            )
+                # Append mean error to the evolution list for this batch
+                error_evolution[direction].append(rmse)
 
-            past = None
-            xn = batch_coarse_flatten[:, 0:1, :]
-            previous_len = 1
-            mem = []
-            for j in range(Nt):
-                if j == 0:
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
-                elif past[0][0].shape[2] < args.n_ctx and j > 0:
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
-                else:
-                    past = [
-                        [past[l][0][:, :, IDHistory, :], past[l][1][:, :, IDHistory, :]]
-                        for l in range(args.n_layer)
-                    ]
-                    xnp1, past, _, _ = model(inputs_embeds=xn, past=past)
-                xn = xnp1
-                mem.append(xn)
-            mem = torch.cat(mem, dim=1)
-
-            local_batch_size = mem.shape[0]
-            for i in tqdm(range(local_batch_size)):
-                er = loss_func(
-                    mem[i : i + 1],
-                    batch_coarse_flatten[
-                        i : i + 1, previous_len : previous_len + Nt, :
-                    ],
+                # Plot and save with consistent colorbars
+                fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+                im0 = axes[0].imshow(
+                    pred_img, cmap="viridis", vmin=label_min, vmax=label_max
                 )
-                r_er = er / loss_func(
-                    mem[i : i + 1] * 0,
-                    batch_coarse_flatten[
-                        i : i + 1, previous_len : previous_len + Nt, :
-                    ],
+                axes[0].set_title("Predicted")
+                axes[0].axis("off")
+
+                im1 = axes[1].imshow(
+                    label_img, cmap="viridis", vmin=label_min, vmax=label_max
                 )
-                REs.append(r_er.item())
-                prediction = mem[i : i + 1]
-                truth = batch_coarse_flatten[
-                    i : i + 1, previous_len : previous_len + Nt, :
-                ]
-                # spatial recover
-                prediction = prediction.reshape(
-                    [
-                        prediction.shape[0],
-                        prediction.shape[1],
-                        num_velocity,
-                        args.coarse_dim[0],
-                        args.coarse_dim[1],
-                        args.coarse_dim[2],
-                    ]
+                axes[1].set_title("Ground Truth")
+                axes[1].axis("off")
+
+                im2 = axes[2].imshow(
+                    error_img, cmap="viridis", vmin=label_min, vmax=label_max
                 )
-                truth = truth.reshape(
-                    [
-                        truth.shape[0],
-                        truth.shape[1],
-                        num_velocity,
-                        args.coarse_dim[0],
-                        args.coarse_dim[1],
-                        args.coarse_dim[2],
-                    ]
-                )
+                axes[2].set_title(f"Error (RMSE: {rmse:.4f})")
+                axes[2].axis("off")
 
-                seq_name = "batch" + str(iteration) + "sample" + str(i)
-                try:
-                    os.makedirs(contour_dir + "/" + seq_name)
-                except:
-                    pass
-                for d in tqdm(range(num_velocity + 1)):
-                    try:
-                        os.makedirs(contour_dir + "/" + seq_name + "/" + str(d))
-                    except:
-                        pass
-                    sub_seq_name = contour_dir + "/" + seq_name + "/" + str(d)
-                    for t in tqdm(range(Nt)):
-                        for z in np.linspace(0, prediction.shape[-1] - 1, 1, dtype=int):  # Iterate over the z-axis slices
-                            if d == 3:
-                                data = np.sqrt(
-                                    prediction[0, t, 0, :, :, z].cpu().numpy() ** 2
-                                    + prediction[0, t, 1, :, :, z].cpu().numpy() ** 2
-                                    + prediction[0, t, 2, :, :, z].cpu().numpy() ** 2
-                                )
-                            else:
-                                data = prediction[0, t, d, :, :, z].cpu().numpy()
-                            if d == 3:
-                                X_AR = np.sqrt(
-                                    truth[0, t, 0, :, :, z].cpu().numpy() ** 2
-                                    + truth[0, t, 1, :, :, z].cpu().numpy() ** 2
-                                    + truth[0, t, 2, :, :, z].cpu().numpy() ** 2
-                                )
-                            else:
-                                X_AR = truth[0, t, d, :, :, z].cpu().numpy()
-                            
-                            fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 10))
-                            fig.subplots_adjust(hspace=0.5)
+                # Add colorbars
+                fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+                fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+                fig.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
 
-                            norm = matplotlib.colors.Normalize(vmin=X_AR.min(), vmax=X_AR.max())
-                            im0 = axes[0].imshow(
-                                data[:, :],
-                                # extent=[0, 10, 0, 2],
-                                cmap="jet",
-                                interpolation="bicubic",
-                                norm=norm,
-                            )
-                            axes[0].set_title(f"LED Macro (z={z})")
-                            axes[0].set_ylabel("y")
-                            axes[0].set_xticks([])
+                # Save the plot
+                save_path = os.path.join(direction_dir, f"timestep_{i}.jpg")
+                plt.savefig(save_path, bbox_inches="tight")
+                plt.close(fig)
 
-                            im1 = axes[1].imshow(
-                                X_AR[:, :],
-                                # extent=[0, 10, 0, 2],
-                                cmap="jet",
-                                interpolation="bicubic",
-                                norm=norm,
-                            )
-                            axes[1].set_title(f"Label (z={z})")
-                            axes[1].set_ylabel("y")
-                            axes[1].set_xticks([])
+                # Append to video frames
+                images_for_video.append(cv2.imread(save_path))
 
-                            im2 = axes[2].imshow(
-                                np.abs(X_AR - data),
-                                # extent=[0, 10, 0, 2],
-                                cmap="jet",
-                                interpolation="bicubic",
-                                norm=norm,
-                            )
-                            axes[2].set_title(f"Error (z={z})")
-                            axes[2].set_xlabel("x")
-                            axes[2].set_ylabel("y")
+            # Create video from images
+            video_path = os.path.join(direction_dir, "evolution.avi")
+            height, width, _ = images_for_video[0].shape
+            video_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"XVID"), 10, (width, height))
+            for image in images_for_video:
+                video_writer.write(image)
+            video_writer.release()
 
-                            fig.subplots_adjust(right=0.8)
-                            fig.colorbar(im0, orientation="horizontal", ax=axes)
-                            fig.savefig(
-                                f"{sub_seq_name}/time{t}_z{z}.png",
-                                bbox_inches="tight",
-                                dpi=500,
-                            )
-                            plt.close(fig)
+
+            # Generate and save the line plot for error evolution of this batch
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(range(len(error_evolution[direction])), error_evolution[direction], marker="o")
+            ax.set_title(f"Error Evolution for Direction {direction} (Batch {j})")
+            ax.set_xlabel("Timestep")
+            ax.set_ylabel("Root Mean Squared Error")
+            ax.grid(True)
+
+            # Save the line plot
+            lineplot_path = os.path.join(direction_dir, "error_evolution.jpg")
+            plt.savefig(lineplot_path, bbox_inches="tight")
+            plt.close(fig)
+
+            # Compute average RMSE across all batches for each timestep
+            if len(avg_rmse_evolution[direction]) < len(error_evolution[direction]):
+                avg_rmse_evolution[direction].extend([0] * (len(error_evolution[direction]) - len(avg_rmse_evolution[direction])))
+            for t in range(len(error_evolution[direction])):
+                avg_rmse_evolution[direction][t] += error_evolution[direction][t]
+
+    # Finalize and save average RMSE evolution plots for all batches
+    for direction in avg_rmse_evolution:
+        avg_rmse_evolution[direction] = [rmse / len(all_results) for rmse in avg_rmse_evolution[direction]]
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(range(len(avg_rmse_evolution[direction])), avg_rmse_evolution[direction], marker="o")
+        ax.set_title(f"Average RMSE Evolution for Direction {direction}")
+        ax.set_xlabel("Timestep")
+        ax.set_ylabel("Average Root Mean Squared Error")
+        ax.grid(True)
+
+        # Save the average RMSE evolution plot
+        avg_plot_path = os.path.join(save_dir, f"avg_error_evolution_{direction}.jpg")
+        plt.savefig(avg_plot_path, bbox_inches="tight")
+        plt.close(fig)
 
 
 
-def test_plot_eval_truth_only(args, data_loader, Nt, down_sampler):
-    try:
-        os.makedirs(args.experiment_path + "/contour")
-    except:
-        pass
-    contour_dir = args.experiment_path + "/contour"
-    print("Total iterations:", len(data_loader))
-
-    for iteration, batch in tqdm(enumerate(data_loader)):
-        batch = batch.to(args.device).float()
-        b_size = batch.shape[0]
-        num_time = batch.shape[1]
-        num_velocity = 2
-        batch = batch.reshape([b_size * num_time, num_velocity, 512, 512])
-        batch_coarse = down_sampler(batch).reshape(
-            [b_size, num_time, num_velocity, args.coarse_dim[0], args.coarse_dim[1]]
-        )
-        batch_coarse_flatten = batch_coarse.reshape(
-            [
-                b_size,
-                num_time,
-                num_velocity * args.coarse_dim[0] * args.coarse_dim[1],
-            ]
-        )
-
-        for i in tqdm(range(b_size)):
-            truth = batch_coarse_flatten[i : i + 1, :Nt, :]
-            # Reshape truth to spatial dimensions
-            truth = truth.reshape(
-                [
-                    truth.shape[0],
-                    truth.shape[1],
-                    num_velocity,
-                    args.coarse_dim[0],
-                    args.coarse_dim[1],
-                ]
-            )
-
-            seq_name = "batch" + str(iteration) + "sample" + str(i)
-            try:
-                os.makedirs(contour_dir + "/" + seq_name)
-            except:
-                pass
-            for d in tqdm(range(num_velocity + 1)):
-                try:
-                    os.makedirs(contour_dir + "/" + seq_name + "/" + str(d))
-                except:
-                    pass
-                sub_seq_name = contour_dir + "/" + seq_name + "/" + str(d)
-                for t in tqdm(range(Nt)):
-                    if d == 2:
-                        X_AR = np.sqrt(
-                            truth[0, t, 0, :, :].cpu().numpy() ** 2
-                            + truth[0, t, 1, :, :].cpu().numpy() ** 2
-                        )
-                    else:
-                        X_AR = truth[0, t, d, :, :].cpu().numpy()
-
-                    fig, ax = plt.subplots()
-                    norm = matplotlib.colors.Normalize(vmin=X_AR.min(), vmax=X_AR.max())
-                    im = ax.imshow(
-                        X_AR[:, :],
-                        extent=[0, 10, 0, 2],
-                        cmap="jet",
-                        interpolation="bicubic",
-                        norm=norm,
-                    )
-                    ax.set_title("Label")
-                    ax.set_ylabel("y")
-                    ax.set_xlabel("x")
-                    fig.colorbar(im, orientation="horizontal", ax=ax)
-                    fig.savefig(
-                        sub_seq_name + "/time" + str(t) + ".png",
-                        bbox_inches="tight",
-                        dpi=500,
-                    )
-                    plt.close(fig)
-
-
-"""
-start test
-"""
-
-
-def eval_seq_overall(args_train, args_sample, model, data_loader, loss_func):
-    down_sampler = torch.nn.Upsample(
-        size=args_train.coarse_dim, mode=args_train.coarse_mode
-    )
-    Nt = args_sample.test_Nt
-    tic = time.time()
-    print("Start test forwarding with Step number of ", Nt)
-    max_mre, min_mre, mean_mre, sigma3 = test_epoch(
-        args=args_train,
-        model=model,
-        data_loader=data_loader,
-        loss_func=loss_func,
-        Nt=Nt,
-        down_sampler=down_sampler,
-        ite_thold=None,
-    )
-    print("#### max mre test####=", max_mre)
-    print("#### mean mre test####=", mean_mre)
-    print("#### min mre test####=", min_mre)
-    print("#### 3 sigma ####=", sigma3)
-    print("Test elapsed ", time.time() - tic)
-    test_plot_eval(
-        args=args_train,
-        args_sample=args_sample,
-        model=model,
-        data_loader=data_loader,
-        loss_func=loss_func,
-        Nt=Nt,
-        down_sampler=down_sampler,
-    )
+        print(f"Results saved in {save_dir}")

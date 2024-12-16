@@ -1,0 +1,51 @@
+checkpoint: data_3d_bubbles_2024_12_12_10_49_50
+
+# Dataset
+dataset: data_3d_bubbles # Name of the dataset
+data_location: 
+  - "./data/data0_sample16.npy" # The relative or absolute path to the data.npy file
+  - "./data/data1_sample16.npy" # The relative or absolute path to the data.npy file
+max_autoregressive_steps: 4 # Max sequence length (per sequence) to train the model
+start_n: 0 # The starting step of the data
+n_span: 9000 # The total step of the data from the starting step
+autoregressive_steps_valid: 30 # Max sequence length (per sequence) to validate the model
+start_n_valid: 3000 # The starting step of the validation data
+n_span_valid: 200 # The total step of the validation data from the starting step
+stride_min: 1
+stride_max: 2
+stride_valid: 1
+
+# Model
+previous_model_name: best_model.pth
+model_name: SequentialModel # Name of the model
+coarse_dim: [9,9,18] # The coarse shape (hidden) of the transformer
+n_velocities: 3 # Number of velocities
+n_layer: 2 # Number of attention layers
+output_hidden_states: true # Output hidden matrix
+output_attentions: true # Output attention matrix
+num_timesteps: 10 # Number of steps the transformer can look back at
+n_head: 2 # Number of heads per layer
+embd_pdrop: 0.0 # Embedding dropout probability
+layer_norm_epsilon: 1.0e-5 # Epsilon value for layer normalization (Do not change)
+attn_pdrop: 0.0 # Attention dropout probability
+resid_pdrop: 0.0 # Residual dropout probability
+activation_function: "relu" # Activation function for the model
+initializer_range: 0.02 # Range for weight initialization
+device: "cuda" # Device to run the training (e.g., 'cuda', 'cpu')
+is_flatten: True # If the model require a flatten volume (3 * product(coarse_dim))
+
+# Training
+start_autoregressive_steps: 2 # The starting length for forward propagation
+d_autoregressive_steps: 1 # The change in length for forward propagation
+batch_size: 16 # Number of sequences to train together per backpropagation
+batch_size_valid: 16 # Number of sequences to validate together per validation
+shuffle: true # Shuffle the training data
+epoch_num: 200 # Number of epochs for training
+epoch_valid_interval: 10 # Interval for validation
+epoch_save_interval: 100 # Interval for model saving
+iter_per_epoch: 500 # Number of iteration per epochs
+learning_rate: 1.0e-4 # Learning rate for the optimizer
+lr_decay_factor: 0.5 # Learning rate decay factor
+lr_decay_patience: 5 # Learning rate decay patience
+coarse_mode: "trilinear" # The method for downsampling the snapshot
+march_loss_threshold: 0.0165 # March threshold for autoregressive_steps + 1
