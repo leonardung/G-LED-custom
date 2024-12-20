@@ -35,7 +35,6 @@ class bfs_dataset_split(Dataset):
         else:
             self.current: torch.Tensor = torch.from_numpy(np.load(self.files[-1]))
         self.current = self.current[:, :1, :, :, 60:64]
-        print(f"{self.current.shape=}")
 
     def __getitem__(self, index):
         data = self.current[

@@ -1,12 +1,12 @@
-checkpoint: bfs_dataset_split_2024_12_16_11_02_46
+checkpoint: bfs_dataset_split_2024_12_19_22_38_56
 
 # Dataset
 dataset: bfs_dataset_split # Name of the dataset
-data_location: "./data/global_domain_float16" # The relative or absolute path to the data.npy folder
-max_autoregressive_steps: 6 # Max sequence length (per sequence) to train the model
+data_location: "./data/global_domain_float16_double" # The relative or absolute path to the data.npy folder
+max_autoregressive_steps: 20 # Max sequence length (per sequence) to train the model
 start_n: 0 # The starting step of the data
 n_span: 4500 # The total step of the data from the starting step
-autoregressive_steps_valid: 10 # Max sequence length (per sequence) to validate the model
+autoregressive_steps_valid: 20 # Max sequence length (per sequence) to validate the model
 start_n_valid: 4500 # The starting step of the validation data
 n_span_valid: 500 # The total step of the validation data from the starting step
 stride_min: 1
@@ -16,7 +16,7 @@ stride_valid: 2
 # Model
 previous_model_name: best_model.pth
 model_name: SequentialModel # Name of the model
-coarse_dim: [38,36,2] # The coarse shape (hidden) of the transformer
+coarse_dim: [58,36,2] # The coarse shape (hidden) of the transformer
 n_velocities: 1 # Number of velocities
 n_layer: 2 # Number of attention layers
 output_hidden_states: true # Output hidden matrix
@@ -33,7 +33,7 @@ device: "cuda:0" # Device to run the training (e.g., 'cuda', 'cpu')
 is_flatten: True # If the model require a flatten volume (3 * product(coarse_dim))
 
 # Training
-start_autoregressive_steps: 2 # The starting length for forward propagation
+start_autoregressive_steps: 20 # The starting length for forward propagation
 d_autoregressive_steps: 1 # The change in length for forward propagation
 batch_size: 8 # Number of sequences to train together per backpropagation
 batch_size_valid: 8 # Number of sequences to validate together per validation

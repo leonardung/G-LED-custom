@@ -178,9 +178,9 @@ def train_model(
             iter_per_epoch=config.iter_per_epoch,
         )
 
+        dataloader.dataset.load_new_file()
         # Compute validation loss every val_interval epochs (after some warmup)
         if epoch % config.epoch_valid_interval == 0 and epoch > 0:
-            dataloader.dataset.load_new_file()
             avg_val_loss, current_autoregressive_steps = validate_model(
                 model=model,
                 val_dataloader=val_dataloader,
