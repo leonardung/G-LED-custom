@@ -1,7 +1,7 @@
 training_path: "bfs_dataset_split_2025_01_14_16_06_31"
 model_name: "best_model.pth"
 autoregressive_steps: 10  # Nt
-unet_dim: 128
+unet_dim: 32
 num_sample_steps: 20
 batch_size: 1
 epoch_num: 61
