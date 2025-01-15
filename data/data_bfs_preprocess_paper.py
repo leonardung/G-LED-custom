@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 class bfs_dataset_paper(Dataset):
     def __init__(
         self,
-        config: TypedArgs, mode: str = "train",
+        config: SeqTypedArgs, mode: str = "train",
     ):
         if mode == "train":
             self.start_n = config.start_n

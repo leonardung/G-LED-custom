@@ -5,11 +5,11 @@ import torch.nn.functional as F
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 class bfs_dataset_split(Dataset):
-    def __init__(self, config: TypedArgs, mode: str = "train"):
+    def __init__(self, config: SeqTypedArgs, mode: str = "train"):
         self.config = config
         if mode == "train":
             self.n_span = config.n_span
@@ -32,9 +32,10 @@ class bfs_dataset_split(Dataset):
         if self.mode == "train":
             file_loaded = np.random.choice(self.files[:-1])
             self.current: torch.Tensor = torch.from_numpy(np.load(file_loaded))
+            print(f"{file_loaded=}")
         else:
             self.current: torch.Tensor = torch.from_numpy(np.load(self.files[-1]))
-        self.current = self.current[:, :1, :, :, 60:64]
+        self.current = self.current[:, : self.config.n_velocities, :, 16:48, 50:66]
 
     def __getitem__(self, index):
         data = self.current[

@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import yaml
 
-from config.seq_args_typed import TypedArgs
+from config.diff_args_typed import DiffTypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 def get_data_location(args):
@@ -38,7 +39,7 @@ def save_loss(args, loss_list, Nt):
     np.savetxt(os.path.join(args.logging_path, "loss_curve.txt"), np.asarray(loss_list))
 
 
-def update_args(config: TypedArgs, visu=False) -> TypedArgs:
+def update_args(config: SeqTypedArgs, visu=False) -> SeqTypedArgs:
     config.time = "{0:%Y_%m_%d_%H_%M_%S}".format(datetime.now())
     config.coarse_dim = tuple(config.coarse_dim)
     config.coarse_product = reduce(operator.mul, config.coarse_dim, 1)
@@ -93,7 +94,7 @@ def tuple_constructor(loader, node):
 CustomLoader.add_constructor("tag:yaml.org,2002:python/tuple", tuple_constructor)
 
 
-def load_config(config_path) -> TypedArgs:
+def load_config(config_path) -> SeqTypedArgs | DiffTypedArgs:
     with open(config_path, "r") as f:
         config = yaml.load(f, Loader=CustomLoader)
     return SimpleNamespace(**config)

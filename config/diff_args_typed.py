@@ -1,0 +1,11 @@
+class DiffTypedArgs:
+    training_path: str
+    model_name: str
+    autoregressive_steps: int
+    unet_dim: int
+    num_sample_steps: int
+    batch_size: int
+    epoch_num: int
+    device: str
+    logging_path: str
+    model_save_path: str

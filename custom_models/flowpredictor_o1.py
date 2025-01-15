@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import math
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 class PositionalEncoding3D(nn.Module):
@@ -62,7 +62,7 @@ class PositionalEncoding3D(nn.Module):
 class FlowPredictorTransformer(nn.Module):
     def __init__(
         self,
-        config: TypedArgs,
+        config: SeqTypedArgs,
     ):
         super(FlowPredictorTransformer, self).__init__()
 

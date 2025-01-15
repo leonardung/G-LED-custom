@@ -5,11 +5,11 @@ import torch.nn.functional as F
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 class bfs_dataset_split_2d(Dataset):
-    def __init__(self, config: TypedArgs, mode: str = "train"):
+    def __init__(self, config: SeqTypedArgs, mode: str = "train"):
         self.config = config
         if mode == "train":
             self.n_span = config.n_span

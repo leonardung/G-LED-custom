@@ -5,11 +5,11 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from scipy.ndimage import gaussian_filter
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 
 class data_2d_to_3d_bubbles(Dataset):
-    def __init__(self, config: TypedArgs, mode: str = "train"):
+    def __init__(self, config: SeqTypedArgs, mode: str = "train"):
         self.config=config
         if mode=="train":
             self.n_span = config.n_span

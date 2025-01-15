@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 
 from tqdm import tqdm
 
@@ -146,7 +146,7 @@ def validate_model(
 
 
 def train_model(
-    config: TypedArgs,
+    config: SeqTypedArgs,
     model: torch.nn.Module,
     dataloader: DataLoader,
     val_dataloader: DataLoader,
@@ -178,9 +178,10 @@ def train_model(
             iter_per_epoch=config.iter_per_epoch,
         )
 
-        dataloader.dataset.load_new_file()
+        # dataloader.dataset.load_new_file()
         # Compute validation loss every val_interval epochs (after some warmup)
         if epoch % config.epoch_valid_interval == 0 and epoch > 0:
+            dataloader.dataset.load_new_file()
             avg_val_loss, current_autoregressive_steps = validate_model(
                 model=model,
                 val_dataloader=val_dataloader,
@@ -226,25 +227,28 @@ def train_model(
 def _plot_training_progress(epoch, train_losses, val_losses, lrs, save_dir):
     plt.figure(figsize=(10, 6))
 
-    plt.plot(range(1, epoch + 1), train_losses, label="Train Loss")
-    plt.plot(range(1, epoch + 1), val_losses, label="Validation Loss")
+    if train_losses is not None:
+        plt.plot(range(1, epoch + 1), train_losses, label="Train Loss")
+    if val_losses is not None:
+        plt.plot(range(1, epoch + 1), val_losses, label="Validation Loss")
 
     ax1 = plt.gca()
-    ax2 = ax1.twinx()
-    ax2.plot(
-        range(1, epoch + 1),
-        lrs,
-        label="Learning Rate",
-        color="green",
-        linestyle="--",
-    )
+    if lrs is not None:
+        ax2 = ax1.twinx()
+        ax2.plot(
+            range(1, epoch + 1),
+            lrs,
+            label="Learning Rate",
+            color="green",
+            linestyle="--",
+        )
+        ax2.set_yscale("log")
+        ax2.set_ylabel("Learning Rate")
+        ax2.legend(loc="upper right")
     ax1.set_yscale("log")
-    ax2.set_yscale("log")
     ax1.set_xlabel("Epochs")
     ax1.set_ylabel("Loss")
-    ax2.set_ylabel("Learning Rate")
     ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
 
     plt.title("Training Progress")
     plt.grid(True)

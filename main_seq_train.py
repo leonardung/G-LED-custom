@@ -20,12 +20,12 @@ if __name__ == "__main__":
 
     dataset = get_dataset(config.dataset, **{"config": config, "mode": "train"})
     dataloader = DataLoader(
-        dataset, batch_size=config.batch_size, shuffle=config.shuffle, num_workers=2
+        dataset, batch_size=config.batch_size, shuffle=config.shuffle, num_workers=0
     )
 
     val_dataset = get_dataset(config.dataset, **{"config": config, "mode": "val"})
     val_dataloader = DataLoader(
-        val_dataset, batch_size=config.batch_size_valid, shuffle=False, num_workers=2
+        val_dataset, batch_size=config.batch_size_valid, shuffle=False, num_workers=0
     )
     print(f"{len(dataset) = }")
     print(f"{len(dataloader) = }")

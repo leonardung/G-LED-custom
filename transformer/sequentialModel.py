@@ -8,7 +8,7 @@ import numpy as np
 import math
 import torch.nn.functional as F
 from packaging import version
-from config.seq_args_typed import TypedArgs
+from config.seq_args_typed import SeqTypedArgs
 from transformer.spatialModel import MLP as MLPDense
 
 
@@ -180,7 +180,7 @@ class Attention(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, num_timesteps, config: TypedArgs, scale=False):
+    def __init__(self, num_timesteps, config: SeqTypedArgs, scale=False):
         super().__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
@@ -219,7 +219,7 @@ class Block(nn.Module):
 
 
 class SequentialModel(nn.Module):
-    def __init__(self, config: TypedArgs):  # in MLP: n_state=3072 (4 * n_embd)
+    def __init__(self, config: SeqTypedArgs):  # in MLP: n_state=3072 (4 * n_embd)
         super().__init__()
         self.config = config
         self.output_hidden_states = config.output_hidden_states

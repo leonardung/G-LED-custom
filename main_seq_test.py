@@ -13,7 +13,7 @@ register_models()
 
 
 if __name__ == "__main__":
-    training_path = "bfs_dataset_split_2024_12_19_22_38_56"
+    training_path = "bfs_dataset_split_2024_12_23_17_23_58"
     model_name = "best_model.pth"
     autoregressive_steps = 80
     is_valid = True

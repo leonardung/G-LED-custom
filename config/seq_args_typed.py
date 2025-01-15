@@ -1,4 +1,4 @@
-class TypedArgs:
+class SeqTypedArgs:
     checkpoint: str
     
     # Dataset
