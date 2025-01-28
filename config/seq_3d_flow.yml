@@ -16,7 +16,7 @@ stride_valid: 1
 # Model
 previous_model_name: best_model.pth
 model_name: SequentialModel # Name of the model
-coarse_dim: [32,32,2] # The coarse shape (hidden) of the transformer
+coarse_dim: [32,15,2] # The coarse shape (hidden) of the transformer
 n_velocities: 3 # Number of velocities
 n_layer: 2 # Number of attention layers
 output_hidden_states: true # Output hidden matrix

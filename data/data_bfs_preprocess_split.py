@@ -35,7 +35,7 @@ class bfs_dataset_split(Dataset):
             print(f"{file_loaded=}")
         else:
             self.current: torch.Tensor = torch.from_numpy(np.load(self.files[-1]))
-        self.current = self.current[:, : self.config.n_velocities, :, 16:48, 50:66]
+        self.current = self.current[:, : self.config.n_velocities, :, 20:40, 50:66]
 
     def __getitem__(self, index):
         data = self.current[
@@ -56,48 +56,6 @@ class bfs_dataset_split(Dataset):
             if flip_axes:
                 data = torch.flip(data, dims=flip_axes)
         return data
-
-    def random_crop_and_resize(self, data):
-        """
-        Apply a random crop and resize the volume back to its original size.
-        Args:
-            data (torch.Tensor): Input tensor of shape [time, velocity, depth, height, width].
-        Returns:
-            torch.Tensor: Transformed tensor with the same shape as input.
-        """
-        _, v, d, h, w = data.shape
-
-        # Randomly select crop sizes within a range [half, full size] for each dimension
-        crop_d = np.random.randint(d // 2, d + 1)
-        crop_h = np.random.randint(h // 2, h + 1)
-        crop_w = np.random.randint(w // 2, w + 1)
-
-        crop_d = d // 2
-        crop_h = h // 2
-        crop_w = w // 2
-
-        # Randomly select start indices ensuring the crop fits within the bounds
-        d_start = np.random.randint(0, d - crop_d + 1)
-        h_start = np.random.randint(0, h - crop_h + 1)
-        w_start = np.random.randint(0, w - crop_w + 1)
-
-        # Crop the data
-        cropped = data[
-            :,
-            :,
-            d_start : d_start + crop_d,
-            h_start : h_start + crop_h,
-            w_start : w_start + crop_w,
-        ]
-
-        # Interpolate back to the original size
-        resized = F.interpolate(
-            cropped,  # Add batch dimension for interpolation
-            size=(d, h, w),  # Target size
-            mode="trilinear",  # Trilinear interpolation
-            align_corners=True,
-        )
-        return resized
 
 
 if __name__ == "__main__":
