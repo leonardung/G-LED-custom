@@ -31,11 +31,10 @@ class bfs_dataset_split(Dataset):
     def load_new_file(self):
         if self.mode == "train":
             file_loaded = np.random.choice(self.files[:-1])
-            self.current: torch.Tensor = torch.from_numpy(np.load(file_loaded))
-            print(f"{file_loaded=}")
         else:
-            self.current: torch.Tensor = torch.from_numpy(np.load(self.files[-1]))
-        self.current = self.current[:, : self.config.n_velocities, :, 20:40, 50:66]
+            file_loaded = self.files[-1]
+        self.current: torch.Tensor = torch.from_numpy(np.load(file_loaded))
+        # self.current = self.current[:, : self.config.n_velocities, :, 20:40, 50:66]
 
     def __getitem__(self, index):
         data = self.current[

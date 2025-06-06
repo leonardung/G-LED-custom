@@ -7,6 +7,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from config.seq_args_typed import SeqTypedArgs
 
@@ -90,6 +91,7 @@ def validate_model(
     # Pause training and increase autoregressive steps until avg_val_loss > loss_threshold
     while True:
         total_val_loss = 0.0
+        val_dataloader_length_without_nan=0
         with torch.no_grad():
             for val_batch in val_dataloader:
                 val_batch = val_batch.to(device)
@@ -119,11 +121,12 @@ def validate_model(
                     xn_label = val_batch[:, step + 1 : step + 1 + num_timesteps, :]
                     val_loss: torch.Tensor = criterion(xnp1, xn_label)
                     total_batch_loss += val_loss.item()
-
                 avg_val_batch_loss = total_batch_loss / current_autoregressive_steps
-                total_val_loss += avg_val_batch_loss
-
-        avg_val_loss = total_val_loss / len(val_dataloader)
+                if not np.isnan(avg_val_batch_loss):
+                    total_val_loss += avg_val_batch_loss
+                    val_dataloader_length_without_nan += 1
+        avg_val_loss = total_val_loss / val_dataloader_length_without_nan
+        
         tqdm.write(
             f"Validation Loss with {current_autoregressive_steps} autoregressive steps: {avg_val_loss:.3e}"
         )
@@ -141,6 +144,7 @@ def validate_model(
             tqdm.write(
                 f"Validation loss {avg_val_loss:.3e} below threshold {loss_threshold}, increasing autoregressive steps to {current_autoregressive_steps}"
             )
+            break # only increase once every validation
 
     return avg_val_loss, current_autoregressive_steps
 
@@ -154,6 +158,8 @@ def train_model(
     optimizer: Optimizer,
     scheduler: LRScheduler,
 ):
+    log_dir = os.path.join(config.model_save_path, "runs")
+    writer = SummaryWriter(log_dir=log_dir)
     best_val_loss = float("inf")
     train_losses = []
     val_losses = []
@@ -195,6 +201,7 @@ def train_model(
                 down_sampler=down_sampler,
                 is_flatten=config.is_flatten,
             )
+            writer.add_scalar("Loss/val", avg_val_loss, epoch)
 
             # Adjust learning rate and save best model
             scheduler.step(avg_val_loss)
@@ -213,15 +220,18 @@ def train_model(
         current_lr = optimizer.param_groups[0]["lr"]
         lrs.append(current_lr)
         train_losses.append(avg_loss)
+        writer.add_scalar("Loss/train", avg_loss, epoch)
+        writer.add_scalar("Learning_Rate", current_lr, epoch)
 
-        _plot_training_progress(
-            epoch + 1, train_losses, val_losses, lrs, config.model_save_path
-        )
+        # _plot_training_progress(
+        #     epoch + 1, train_losses, val_losses, lrs, config.model_save_path
+        # )
 
     # Save the final model
     final_model_path = f"{config.model_save_path}/model_{epoch}.pth"
     torch.save(model.state_dict(), final_model_path)
     print(f"Model saved to {final_model_path}")
+    writer.close()
 
 
 def _plot_training_progress(epoch, train_losses, val_losses, lrs, save_dir):

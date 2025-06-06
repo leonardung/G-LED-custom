@@ -48,7 +48,6 @@ def update_args(config: SeqTypedArgs, visu=False) -> SeqTypedArgs:
     config.trajec_max_len_valid = (
         config.num_timesteps + config.autoregressive_steps_valid + 1
     )
-    config.dir_output = "output/"
     try:
         config.previous_model_name = os.path.join(
             config.dir_output,

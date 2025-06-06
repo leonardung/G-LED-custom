@@ -13,13 +13,15 @@ register_models()
 
 
 if __name__ == "__main__":
-    training_path = "bfs_dataset_split_2024_12_23_17_23_58"
+    training_path = "bfs_dataset_split_2025_06_05_04_34_52"
+    dir_output = "/shared/data1/Users/l1148900/G-LED/output/"
     model_name = "best_model.pth"
     autoregressive_steps = 80
+    stride = 200
     is_valid = True
 
-    model_path = os.path.join("output", training_path, "model_save", model_name)
-    config = load_config(os.path.join("output", training_path, "logging/args.yml"))
+    model_path = os.path.join(dir_output, training_path, "model_save", model_name)
+    config = load_config(os.path.join(dir_output, training_path, "logging/args.yml"))
     config.autoregressive_steps_valid = autoregressive_steps
     config.max_autoregressive_steps = autoregressive_steps
     config.trajec_max_len_valid = (
@@ -34,7 +36,6 @@ if __name__ == "__main__":
         if is_valid
         else config.max_autoregressive_steps
     )
-    stride = 100
     device = torch.device(config.device if torch.cuda.is_available() else "cpu")
     model: torch.nn.Module = get_model(config.model_name, **{"config": config}).to(
         config.device
