@@ -61,7 +61,9 @@ def update_args(config: SeqTypedArgs, visu=False) -> SeqTypedArgs:
     if visu:
         config.fname = config.checkpoint
     else:
-        config.fname = config.dataset + "_" + config.time
+        config.fname = (
+            config.dataset + "_" + config.time + "_" + config.run_name_postfix
+        )
     config.experiment_path = config.dir_output + config.fname
     config.model_save_path = os.path.join(config.experiment_path, "model_save/")
     config.logging_path = os.path.join(config.experiment_path, "logging/")

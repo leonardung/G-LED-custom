@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#SBATCH -o /home/l1148900/dns_project/G-LED-custom/output/maple_gpu_job.out
-#SBATCH -e /home/l1148900/dns_project/G-LED-custom/output/maple_gpu_job.err
+#SBATCH -o /home/l1148900/dns_project/G-LED-custom/output/maple_gpu_vit_job.out
+#SBATCH -e /home/l1148900/dns_project/G-LED-custom/output/maple_gpu_vit_job.err
 #SBATCH -p maple
 #SBATCH -c 72
 #SBATCH --mem=64G

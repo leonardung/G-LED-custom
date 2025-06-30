@@ -1,3 +1,4 @@
+import glob
 import os
 from typing import Callable
 from matplotlib import pyplot as plt
@@ -45,25 +46,29 @@ def train_one_epoch(
 
             for step in range(current_autoregressive_steps):
                 optimizer.zero_grad()
-                # output: torch.Tensor = model(current_input)[0][:, -1]
-                # target = target_data[:, step]
-                # loss: torch.Tensor = criterion(output, target)
+                output: torch.Tensor = model(
+                    current_input.transpose(1, 2).contiguous()
+                )  # [0][:, -1]
+                target = target_data[:, step]
+                loss: torch.Tensor = criterion(output, target)
 
-                # output = output.unsqueeze(1)  # Add time dimension
-                # current_input = torch.cat([current_input[:, 1:], output.detach()], dim=1)
+                output = output.unsqueeze(1)  # Add time dimension
+                current_input = torch.cat(
+                    [current_input[:, 1:], output.detach()], dim=1
+                )
 
-                # loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                # optimizer.step()
-                # total_loss += loss.item()
-
-                xn = batch[:, step : step + num_timesteps, :]
-                xnp1, _, _, _ = model(inputs_embeds=xn, past=None)
-                xn_label = batch[:, step + 1 : step + 1 + num_timesteps, :]
-                loss: torch.Tensor = criterion(xnp1, xn_label)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
                 total_loss += loss.item()
+
+                # xn = batch[:, step : step + num_timesteps, :]
+                # xnp1, _, _, _ = model(inputs_embeds=xn, past=None)
+                # xn_label = batch[:, step + 1 : step + 1 + num_timesteps, :]
+                # loss: torch.Tensor = criterion(xnp1, xn_label)
+                # loss.backward()
+                # optimizer.step()
+                # total_loss += loss.item()
 
             avg_loss = total_loss / ((iteration + 1) * current_autoregressive_steps)
             pbar.set_postfix({"loss": f"{avg_loss:.3e}"})
@@ -85,6 +90,8 @@ def validate_model(
     loss_threshold: float,
     down_sampler: str,
     is_flatten: bool = True,
+    global_step: int = 0,
+    writer: SummaryWriter | None = None,
 ):
     model.eval()
 
@@ -93,7 +100,7 @@ def validate_model(
         total_val_loss = 0.0
         val_dataloader_length_without_nan = 0
         with torch.no_grad():
-            for val_batch in val_dataloader:
+            for batch_idx, val_batch in enumerate(val_dataloader):
                 val_batch = val_batch.to(device)
                 val_batch = _process_tensor(
                     val_batch, coarse_dim, down_sampler, is_flatten
@@ -107,10 +114,42 @@ def validate_model(
 
                 total_batch_loss = 0.0
                 for step in range(current_autoregressive_steps):
-                    output: torch.Tensor = model(current_input)[0][:, -1]
+                    output: torch.Tensor = model(
+                        current_input.transpose(1, 2).contiguous()
+                    )
                     target = target_data[:, step]
                     val_loss = criterion(output, target)
+                    if batch_idx == 0 and step == 0 and writer is not None:
+                        fig_first = _plot_ar_step(
+                            pred=output[0],
+                            gt=target[0],
+                            channel_names=("u", "v", "w"),
+                            is_3d=len(coarse_dim) == 3,
+                        )
+                        writer.add_figure(
+                            "Validation/First_AR_Step",
+                            fig_first,
+                            global_step=global_step,
+                        )
+                    if (
+                        batch_idx == 0
+                        and step == current_autoregressive_steps - 1
+                        and writer is not None
+                    ):
+                        fig_last = _plot_ar_step(
+                            pred=output[0],
+                            gt=target[0],
+                            channel_names=("u", "v", "w"),
+                            is_3d=len(coarse_dim) == 3,
+                        )
+                        writer.add_figure(
+                            "Validation/Last_AR_Step",
+                            fig_last,
+                            global_step=global_step,
+                        )
                     total_batch_loss += val_loss.item()
+
+                    # Update current_input
                     output = output.unsqueeze(1)
                     current_input = torch.cat([current_input[:, 1:], output], dim=1)
 
@@ -198,6 +237,8 @@ def train_model(
                 loss_threshold=config.march_loss_threshold,
                 down_sampler=down_sampler,
                 is_flatten=config.is_flatten,
+                global_step=epoch,
+                writer=writer,
             )
             writer.add_scalar("Loss/val", avg_val_loss, epoch)
 
@@ -214,6 +255,18 @@ def train_model(
             final_model_path = f"{config.model_save_path}/model_{epoch}.pth"
             torch.save(model.state_dict(), final_model_path)
             print(f"Model saved to {final_model_path}")
+            pattern = os.path.join(config.model_save_path, "model_*.pth")
+            all_ckpts = glob.glob(pattern)
+            all_ckpts.sort(
+                key=lambda p: int(
+                    os.path.splitext(os.path.basename(p))[0].split("_")[1]
+                )
+            )
+            while len(all_ckpts) > 3:
+                to_delete = all_ckpts.pop(0)
+                os.remove(to_delete)
+                print(f"Deleted old checkpoint {to_delete}")
+
         val_losses.append(avg_val_loss)
         current_lr = optimizer.param_groups[0]["lr"]
         lrs.append(current_lr)
@@ -271,30 +324,55 @@ def _plot_training_progress(epoch, train_losses, val_losses, lrs, save_dir):
     plt.close()
 
 
-def _plot_input_target_pred(
-    current_input: torch.Tensor, target: torch.Tensor, output: torch.Tensor, coarse_dim
+def _plot_ar_step(
+    pred: torch.Tensor,
+    gt: torch.Tensor,
+    channel_names=("u", "v", "w"),
+    is_3d: bool = False,
 ):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    im0 = axes[0].imshow(
-        current_input.squeeze()
-        .cpu()
-        .detach()
-        .numpy()[-1]
-        .reshape(3, *coarse_dim)[0, :, :, 5],
-        cmap="viridis",
-    )
-    im1 = axes[1].imshow(
-        target.squeeze().reshape(3, *coarse_dim)[0, :, :, 5].cpu().detach().numpy(),
-        cmap="viridis",
-    )
-    im2 = axes[2].imshow(
-        output.squeeze().reshape(3, *coarse_dim)[0, :, :, 5].cpu().detach().numpy(),
-        cmap="viridis",
-    )
-    fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
-    fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
-    fig.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
-    plt.show()
+    """
+    Build a 2×3 matplotlib Figure of one AR step:
+      top row:   pred[step] channels u,v,w
+      bottom row: gt[step] channels u,v,w
+
+    Args:
+        pred: Tensor of shape (B, T, C, H, W[, D])
+        gt:   Tensor of same shape as pred
+        step: which timestep (0 <= step < T)
+        channel_names: names for the C channels
+        is_3d: if True, will take the central slice along D
+    Returns:
+        fig: matplotlib Figure
+    """
+
+    fig, axes = plt.subplots(2, len(channel_names), figsize=(4 * len(channel_names), 8))
+    slice_idx = None
+    if is_3d:
+        # D must be last dim
+        D = pred.shape[-1]
+        slice_idx = D // 2
+
+    for i, name in enumerate(channel_names):
+        ax_p = axes[0, i]
+        ax_g = axes[1, i]
+
+        if is_3d:
+            img_p = pred[i, ..., slice_idx].cpu().numpy()
+            img_g = gt[i, ..., slice_idx].cpu().numpy()
+        else:
+            img_p = pred[i].cpu().numpy()
+            img_g = gt[i].cpu().numpy()
+
+        ax_p.imshow(img_p, aspect="auto")
+        ax_p.set_title(f"Pred {name}")
+        ax_p.axis("off")
+
+        ax_g.imshow(img_g, aspect="auto")
+        ax_g.set_title(f"GT   {name}")
+        ax_g.axis("off")
+
+    fig.tight_layout()
+    return fig
 
 
 def _process_tensor(
@@ -332,14 +410,22 @@ def _process_tensor(
     # Reshape back and flatten
     if len(coarse_dim) == 2:
         coarse_dim += (1,)
-    tensor_coarse = tensor_coarse.reshape(
-        batch_size,
-        seq_len,
-        num_velocity,
-        coarse_dim[0],
-        coarse_dim[1],
-        coarse_dim[2],
-    )
+        tensor_coarse = tensor_coarse.reshape(
+            batch_size,
+            seq_len,
+            num_velocity,
+            coarse_dim[0],
+            coarse_dim[1],
+        )
+    else:
+        tensor_coarse = tensor_coarse.reshape(
+            batch_size,
+            seq_len,
+            num_velocity,
+            coarse_dim[0],
+            coarse_dim[1],
+            coarse_dim[2],
+        )
     if not is_flatten:
         return tensor_coarse
     tensor_coarse_flatten = tensor_coarse.reshape(

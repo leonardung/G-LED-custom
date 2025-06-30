@@ -1,7 +1,8 @@
-training_path: "bfs_dataset_split_2025_01_14_16_06_31"
+dir_output: "/shared/data1/Users/l1148900/G-LED/output/"
+training_path: "bfs_dataset_split_2025_06_06_02_52_34"
 model_name: "best_model.pth"
 autoregressive_steps: 10  # Nt
-unet_dim: 32
+unet_dim: 8
 num_sample_steps: 20
 batch_size: 1
 epoch_num: 61

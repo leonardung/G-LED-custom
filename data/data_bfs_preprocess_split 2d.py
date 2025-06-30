@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from config.seq_args_typed import SeqTypedArgs
 
 
-class bfs_dataset_split(Dataset):
+class bfs_dataset_split_2d(Dataset):
     def __init__(self, config: SeqTypedArgs, mode: str = "train"):
         self.config = config
         if mode == "train":
@@ -34,10 +34,7 @@ class bfs_dataset_split(Dataset):
         else:
             file_loaded = self.files[-1]
         self.current: torch.Tensor = torch.from_numpy(np.load(file_loaded))
-        if random.random() < 0.5:
-            self.current = self.current[:, : self.config.n_velocities, :, :32, :]
-        else:
-            self.current = self.current[:, : self.config.n_velocities, :, 32:, :]
+        self.current = self.current[:, : self.config.n_velocities, :, :, 64]
 
     def __getitem__(self, index):
         data = self.current[
@@ -48,10 +45,7 @@ class bfs_dataset_split(Dataset):
                 (),  # No flip (original)
                 (2,),  # x-axis (depth)
                 (3,),  # y-axis (height)
-                (4,),  # z-axis (height)
                 (2, 3),  # xy-plane
-                (2, 4),  # xy-plane
-                (3, 4),  # xy-plane
             ]
 
             flip_axes = random.choice(axes_combinations)

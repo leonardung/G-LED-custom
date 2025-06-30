@@ -1,5 +1,7 @@
 checkpoint: bfs_3d_bubble_2025_06_04_02_12_36
 dir_output: "/shared/data1/Users/l1148900/G-LED/output/"
+run_name_postfix: ""
+
 # Dataset
 dataset: bfs_3d_bubble # Name of the dataset
 data_location: "./data/3d_bubbles" # The relative or absolute path to the data.npy folder

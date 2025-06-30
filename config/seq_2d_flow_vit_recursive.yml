@@ -1,14 +1,14 @@
-checkpoint: bfs_dataset_split_2025_06_05_04_34_52
+# checkpoint: bfs_dataset_split_2025_06_05_04_34_52
 dir_output: "/shared/data1/Users/l1148900/G-LED/output/"
-run_name_postfix: ""
+run_name_postfix: "vit_64x32_recursive"
 
 # Dataset
-dataset: bfs_dataset_split # Name of the dataset
+dataset: bfs_dataset_split_2d # Name of the dataset
 data_location: "/shared/data1/Users/l1148900/G-LED/data" # The relative or absolute path to the data.npy folder
-max_autoregressive_steps: 20 # Max sequence length (per sequence) to train the model
+max_autoregressive_steps: 4 # Max sequence length (per sequence) to train the model
 start_n: 0 # The starting step of the data
 n_span: 4500 # The total step of the data from the starting step
-autoregressive_steps_valid: 20 # Max sequence length (per sequence) to validate the model
+autoregressive_steps_valid: 4 # Max sequence length (per sequence) to validate the model
 start_n_valid: 4500 # The starting step of the validation data
 n_span_valid: 500 # The total step of the validation data from the starting step
 stride_min: 1
@@ -17,13 +17,13 @@ stride_valid: 1
 
 # Model
 previous_model_name: model_500.pth
-model_name: SequentialModel # Name of the model
-coarse_dim: [30,12,12] # The coarse shape (hidden) of the transformer
+model_name: ViTWrapperRecursive # Name of the model
+coarse_dim: [64,32] # The coarse shape (hidden) of the transformer
 n_velocities: 3 # Number of velocities
 n_layer: 2 # Number of attention layers
 output_hidden_states: true # Output hidden matrix
 output_attentions: true # Output attention matrix
-num_timesteps: 10 # Number of steps the transformer can look back at
+num_timesteps: 12 # Number of steps the transformer can look back at
 n_head: 2 # Number of heads per layer
 embd_pdrop: 0.0 # Embedding dropout probability
 layer_norm_epsilon: 1.0e-5 # Epsilon value for layer normalization (Do not change)
@@ -32,20 +32,20 @@ resid_pdrop: 0.0 # Residual dropout probability
 activation_function: "relu" # Activation function for the model
 initializer_range: 0.02 # Range for weight initialization
 device: "cuda:0" # Device to run the training (e.g., 'cuda', 'cpu')
-is_flatten: True # If the model require a flatten volume (3 * product(coarse_dim))
+is_flatten: False # If the model require a flatten volume (3 * product(coarse_dim))
 
 # Training
-start_autoregressive_steps: 12 # The starting length for forward propagation
+start_autoregressive_steps: 4 # The starting length for forward propagation
 d_autoregressive_steps: 2 # The change in length for forward propagation
 batch_size: 8 # Number of sequences to train together per backpropagation
 batch_size_valid: 8 # Number of sequences to validate together per validation
 shuffle: true # Shuffle the training data
-epoch_num: 2000 # Number of epochs for training
-epoch_valid_interval: 5 # Interval for validation
+epoch_num: 4000 # Number of epochs for training
+epoch_valid_interval: 1 # Interval for validation
 epoch_save_interval: 100 # Interval for model saving
-iter_per_epoch: 200 # Number of iteration per epochs
+iter_per_epoch: 10 # Number of iteration per epochs
 learning_rate: 1.0e-5 # Learning rate for the optimizer
 lr_decay_factor: 0.5 # Learning rate decay factor
 lr_decay_patience: 10 # Learning rate decay patience
-coarse_mode: "trilinear" # The method for downsampling the snapshot
+coarse_mode: "bilinear" # The method for downsampling the snapshot
 march_loss_threshold: 0.003 # March threshold for autoregressive_steps + 1

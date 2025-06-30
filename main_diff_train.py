@@ -22,10 +22,14 @@ if __name__ == "__main__":
     diff_config_path = "config/diff_3d_flow.yml"
     diff_config: DiffTypedArgs = load_config(diff_config_path)
     diff_config.logging_path = str(
-        Path("output") / diff_config.training_path / Path("diffusion/logging")
+        Path(diff_config.dir_output)
+        / diff_config.training_path
+        / Path("diffusion/logging")
     )
     diff_config.model_save_path = str(
-        Path("output") / diff_config.training_path / Path("diffusion/model_save")
+        Path(diff_config.dir_output)
+        / diff_config.training_path
+        / Path("diffusion/model_save")
     )
     os.makedirs(diff_config.logging_path, exist_ok=True)
     os.makedirs(diff_config.model_save_path, exist_ok=True)
@@ -34,7 +38,9 @@ if __name__ == "__main__":
     diff_config.device = torch.device(diff_config.device)
 
     seq_config: SeqTypedArgs = load_config(
-        os.path.join("output", diff_config.training_path, "logging/args.yml")
+        os.path.join(
+            diff_config.dir_output, diff_config.training_path, "logging/args.yml"
+        )
     )
     seq_config.batch_size = 1
     seq_config.batch_size_valid = 1

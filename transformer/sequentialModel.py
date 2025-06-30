@@ -532,5 +532,14 @@ class SeqModelWithMLP(nn.Module):
 
 
 if __name__ == "__main__":
-    print("I love you.")
-    # x = torch.randn(batch_size, n_steps, config.n_embd) # Batch, time-steps, embed
+    from util.utils import load_config, update_args
+
+    config_path = "config/seq_2d_flow.yml"
+    config: SeqTypedArgs = load_config(config_path)
+    config = update_args(config)
+
+    x = torch.randn(config.batch_size, config.num_timesteps, config.n_embd)
+    model = SequentialModel(config)
+    out, *_ = model(inputs_embeds=x, past=None)
+    print(x.shape)
+    print(out.shape)

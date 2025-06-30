@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 from tqdm import tqdm
-from train_test_seq.train_seq import _process_tensor
+from train_test_seq.train_seq_vit import _process_tensor
 import cv2
 
 
@@ -42,7 +42,7 @@ def autoregressive_test(
     error_min, error_max = float("inf"), float("-inf")
     all_results: list[list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = []
     with torch.no_grad():
-        for batch_idx, batch in tqdm(enumerate(dataloader)):
+        for batch_idx, batch in enumerate(dataloader):
             # Skip timesteps based on stride
             if batch_idx % stride != 0:
                 continue
@@ -53,7 +53,9 @@ def autoregressive_test(
             autoregressive_input = input_data.clone()
             results: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
             for step in range(num_autoregressive_steps):
-                predicted: torch.Tensor = model(autoregressive_input)[0][:, -1]
+                predicted: torch.Tensor = model(
+                    autoregressive_input.permute(0, 2, 1, 3, 4).contiguous()
+                )
 
                 autoregressive_input = torch.cat(
                     (autoregressive_input[:, 1:], predicted.unsqueeze(1)), dim=1
@@ -88,7 +90,7 @@ def autoregressive_test(
     avg_rmse_evolution = {
         direction: [] for direction in ["u", "v", "w"][:num_velocities]
     }
-    for j, timesteps in enumerate(all_results):
+    for j, timesteps in tqdm(enumerate(all_results)):
         timestep_dir = os.path.join(save_dir, f"iteration_{j}")
         os.makedirs(timestep_dir, exist_ok=True)
 

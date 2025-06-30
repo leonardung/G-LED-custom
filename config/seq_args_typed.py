@@ -1,6 +1,10 @@
+from typing import Optional
+
+
 class SeqTypedArgs:
     checkpoint: str
-    
+    run_name_postfix: str
+
     # Dataset
     dataset: str
     data_location: list[str]

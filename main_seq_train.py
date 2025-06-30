@@ -1,9 +1,15 @@
+import traceback
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
 
-from train_test_seq.train_seq import train_model
+# from train_test_seq.train_seq_vit_recursive import train_model
+
+from train_test_seq.train_seq_vit import train_model
+
+# from train_test_seq.train_seq import train_model
+
 from util.utils import load_config, save_args, update_args
 from dataset_registry import register_datasets, get_dataset
 from model_registry import register_models, get_model
@@ -13,7 +19,9 @@ register_models()
 
 
 if __name__ == "__main__":
-    config_path = "config/seq_3d_flow.yml"
+    config_path = "config/seq_3d_flow_vit.yml"
+    # config_path = "config/seq_2d_flow_old.yml"
+    # config_path = "config/seq_2d_flow.yml"
     config = load_config(config_path)
     config = update_args(config)
     save_args(config)
@@ -38,6 +46,7 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(config.previous_model_name))
     except:
         print(f"No checkpoint found")
+        traceback.print_exc()
 
     # Define the model, loss function, and optimizer
     criterion = nn.MSELoss()

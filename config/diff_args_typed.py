@@ -1,4 +1,5 @@
 class DiffTypedArgs:
+    dir_output: str
     training_path: str
     model_name: str
     autoregressive_steps: int
